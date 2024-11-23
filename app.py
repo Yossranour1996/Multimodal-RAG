@@ -7,15 +7,21 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnableLambda
 from langchain.prompts import PromptTemplate
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
-from langchain_community.vectorstores import Chroma
+# from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from utils import *
 import io
+import pytesseract
 import streamlit as st
 from dotenv import load_dotenv
 
 # load Gemini_model api key
+
 load_dotenv()
+os.environ["OCR_AGENT"] = "unstructured.partition.utils.ocr_models.tesseract_ocr.OCRAgentTesseract"
+
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # to print image
 def plt_img_base64(b64data):
@@ -82,7 +88,7 @@ def multi_modal_rag_chain(retriever):
     """
     Multi-modal RAG chain
     """
-    model_vision = ChatGoogleGenerativeAI(model="gemini-pro-vision",temperature=0, max_tokens=1024)
+    model_vision = ChatGoogleGenerativeAI(model="gemini-1.5-pro",temperature=0, max_tokens=1024)
 
     # RAG pipeline
     chain = (
@@ -98,7 +104,8 @@ def multi_modal_rag_chain(retriever):
     return chain
 
 # data loading and text,table and image summarisation 
-@st.cache(allow_output_mutation=True)
+@st.cache_data
+
 def data_loader(pdf_path):
     # extract images from documents using unstructured library
     image_path = "./figures"
@@ -111,6 +118,7 @@ def data_loader(pdf_path):
         new_after_n_chars=2800,
         combine_text_under_n_chars=2000,
         image_output_dir_path=image_path
+        
         )
     
     # extract tables and texts
@@ -124,14 +132,17 @@ def data_loader(pdf_path):
 
 
 # storing the summaries and raw info in the vector and doc stores respectively for retreval
-@st.cache(allow_output_mutation=True)
+@st.cache_resource
 def retriever_func(text_summaries,texts,table_summaries,tables,image_summaries,img_base64_list):
 
     # The vectorstore to use to index the summaries
     vectorstore = Chroma(
         collection_name="mm_rag_gemini",
         embedding_function=GoogleGenerativeAIEmbeddings(model="models/embedding-001"), # embedding model  
+        persist_directory="./chroma_db"
     )
+    
+    
 
     # Create retriever
     retriever_multi_vector_img = create_multi_vector_retriever(
@@ -143,6 +154,9 @@ def retriever_func(text_summaries,texts,table_summaries,tables,image_summaries,i
         image_summaries,
         img_base64_list,
     )
+    
+    stored_documents = vectorstore.get()
+    st.write("Documents in Chroma vectorstore:", stored_documents)
 
     return retriever_multi_vector_img
 
@@ -175,24 +189,59 @@ def main():
         if pdf_file is not None:
             # Get retriever data from session state
             retriever_multi_vector_img = st.session_state.retriever_multi_vector_img
+            
             # Perform QA with the uploaded PDF file and user input
             query = f"{user_input}"
-            # intermediate result
-            docs = retriever_multi_vector_img.get_relevant_documents(query, limit=1) # intermediate reusults
+            
+            # Intermediate results: Retrieve relevant documents and images
+            docs = retriever_multi_vector_img.invoke(query, config={"limit": 1})
 
-            # Display intermediate result inside a hidable container
-            with st.expander("Multi-Vector Retreiver result based on query"):
-                for doc in docs:
-                    if is_image_data(doc):
-                        plt_img_base64(doc)
-                    else:
-                        st.write(doc)
-                
-            # Create RAG chain for final query
+            # Filter and store images and text from intermediate results
+            relevant_images = []
+            relevant_texts = []
+            for doc in docs:
+                if is_image_data(doc):
+                    relevant_images.append(doc)
+                else:
+                    relevant_texts.append(doc)
+            
+            # Create RAG chain for the final query to get the text answer
             chain_multimodal_rag = multi_modal_rag_chain(retriever_multi_vector_img)
+            final_text_result = chain_multimodal_rag.invoke(query)
 
-            # Display final result in a text box
-            st.text_area("Final result from LLM", chain_multimodal_rag.invoke(query))  
+            # Display final text answer
+            st.text_area("Final Result from LLM", final_text_result)
+
+            # Display relevant images from intermediate results
+            with st.expander("Relevant Images"):
+                if relevant_images:
+                    for img in relevant_images:
+                        plt_img_base64(img)
+                else:
+                    st.write("No relevant images found.")
+#     if generate_button:
+#         if pdf_file is not None:
+#             # Get retriever data from session state
+#             retriever_multi_vector_img = st.session_state.retriever_multi_vector_img
+#             # Perform QA with the uploaded PDF file and user input
+#             query = f"{user_input}"
+#             # intermediate result
+#             docs = retriever_multi_vector_img.invoke(query, config={"limit": 1})
+# # intermediate reusults
+
+#             # Display intermediate result inside a hidable container
+#             with st.expander("Multi-Vector Retreiver result based on query"):
+#                 for doc in docs:
+#                     if is_image_data(doc):
+#                         plt_img_base64(doc)
+#                     else:
+#                         st.write(doc)
+                
+#             # Create RAG chain for final query
+#             chain_multimodal_rag = multi_modal_rag_chain(retriever_multi_vector_img)
+
+#             # Display final result in a text box
+#             st.text_area("Final result from LLM", chain_multimodal_rag.invoke(query))  
 
 
 if __name__ == "__main__":

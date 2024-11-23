@@ -1,0 +1,20 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Streamlit Debug",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "streamlit",  // Run Streamlit as a module
+            "args": [
+                "run",
+                "${workspaceFolder}/app.py"  // Path to your app file
+            ],
+            "console": "integratedTerminal",
+            "env": {
+                "STREAMLIT_SERVER_PORT": "8501"  // Set the port if needed
+            },
+            "justMyCode": true
+        }
+    ]
+}

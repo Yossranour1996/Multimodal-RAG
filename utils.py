@@ -49,7 +49,7 @@ def generate_text_summaries(texts, tables, summarize_texts=False):
     Give a concise summary of the table or text that is well-optimized for retrieval. Table \
     or text: {element} """
     prompt = PromptTemplate.from_template(prompt_text)
-    model = ChatGoogleGenerativeAI(model="gemini-pro",temperature=0, max_tokens=1024)
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-pro",temperature=0, max_tokens=1024)
     # Text summary chain
     summarize_chain = {"element": lambda x: x} | prompt | model | StrOutputParser()
 
@@ -78,7 +78,7 @@ def encode_image(image_path):
     
 def image_summarize(img_base64, prompt):
     """Make image summary"""
-    model_vision = ChatGoogleGenerativeAI(model="gemini-pro-vision",temperature=0, max_tokens=1024)
+    model_vision = ChatGoogleGenerativeAI(model="gemini-1.5-pro",temperature=0, max_tokens=1024)
     msg = model_vision.invoke(
         [
             HumanMessage(
@@ -145,6 +145,7 @@ def create_multi_vector_retriever(vectorstore, text_summaries, texts, table_summ
         ]
         retriever.vectorstore.add_documents(summary_docs)
         retriever.docstore.mset(list(zip(doc_ids, doc_contents)))
+        
 
     # Add texts, tables, and images
     # Check that text_summaries is not empty before adding
